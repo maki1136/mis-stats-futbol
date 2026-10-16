@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Mis Stats Fútbol</title>
+<style>
+  :root { --verde:#1f7a3a; --verde-osc:#0e4d22; --verde-claro:#e3f1e7; --blanco:#ffffff; --gris:#f2f5f3; --texto:#1a1a1a; --sub:#555; color-scheme: light; }
+  [hidden] { display:none !important; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, sans-serif; background:var(--gris); color:var(--texto); padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px)); padding-block:0 24px; }
+  header { background:var(--verde); color:var(--blanco); padding:16px; text-align:center; margin:0 calc(-1 * max(16px, env(safe-area-inset-left, 0px))) 12px; padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px)); }
+  header h1 { margin:0; font-size:20px; font-weight:600; }
+  main { max-width:520px; margin:0 auto; }
+  .tabs { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:8px; margin-bottom:8px; }
+  .tab, .vista-btn { background:var(--blanco); color:var(--verde); border:2px solid var(--verde); border-radius:10px; padding:10px; font-size:15px; font-weight:600; width:100%; }
+  .tab.activo, .vista-btn.activo { background:var(--verde); color:var(--blanco); }
+  .vistas { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; margin-bottom:12px; }
+  .vista-btn { font-size:14px; padding:8px 4px; border-width:1px; }
+  .card { background:var(--blanco); border-radius:12px; padding:14px; margin-bottom:12px; box-shadow:0 1px 3px rgba(0,0,0,.08); min-width:0; }
+  .grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+  .stat { text-align:center; background:var(--gris); border-radius:10px; padding:8px 4px; }
+  .stat b { display:block; font-size:22px; color:var(--verde-osc); font-variant-numeric:tabular-nums; }
+  .stat span { font-size:12px; color:var(--sub); }
+  h2 { font-size:16px; color:var(--verde-osc); margin:0 0 4px; font-weight:600; }
+  .sub { font-size:12px; color:var(--sub); margin:0 0 10px; }
+  label { display:block; font-size:13px; color:#444; margin-bottom:8px; min-width:0; }
+  input { width:100%; padding:9px; margin-top:3px; border:1px solid #ccc; border-radius:8px; font-size:16px; }
+  .row { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:8px; }
+  button.principal { width:100%; padding:12px; background:var(--verde); color:var(--blanco); border:none; border-radius:10px; font-size:16px; font-weight:600; cursor:pointer; }
+  .tabla-wrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-size:13px; font-variant-numeric:tabular-nums; }
+  th, td { padding:6px 4px; text-align:right; border-bottom:1px solid #e5e5e5; white-space:nowrap; }
+  th { color:var(--sub); font-weight:600; font-size:12px; }
+  td.eq, th.eq { text-align:left; white-space:normal; min-width:120px; }
+  tr.propio td { background:var(--verde-claro); font-weight:700; color:var(--verde-osc); }
+  .partido { border-left:5px solid var(--verde); padding:10px; margin-bottom:8px; background:var(--blanco); border-radius:0 8px 8px 0; }
+  .partido .top { display:flex; justify-content:space-between; align-items:center; gap:8px; font-weight:600; }
+  .partido .det { font-size:13px; color:var(--sub); margin-top:4px; }
+  .pts { background:var(--verde); color:var(--blanco); border-radius:8px; padding:2px 8px; font-weight:700; white-space:nowrap; font-size:13px; }
+  .pts.vacio { background:#ddd; color:#555; }
+  .del { background:none; border:none; color:#b00020; width:auto; padding:0 4px; font-size:13px; text-decoration:underline; font-weight:400; }
+  .vacio-msg { text-align:center; color:#888; padding:12px; }
+  .nota { font-size:12px; color:var(--sub); margin-top:8px; }
+</style>
+</head>
+<body>
+<header><h1>⚽ Mis Stats</h1></header>
+<main>
+
+  <div class="tabs">
+    <button class="tab" data-equipo="Don Bosco">Don Bosco</button>
+    <button class="tab" data-equipo="Banfield">Banfield</button>
+  </div>
+
+  <div class="vistas">
+    <button class="vista-btn" data-vista="tabla">Tabla</button>
+    <button class="vista-btn" data-vista="partidos">Partidos</button>
+    <button class="vista-btn" data-vista="stats">Estadísticas</button>
+  </div>
+
+  <!-- Vista: Tabla -->
+  <section id="vista-tabla" class="card">
+    <h2 id="titulo">Posiciones</h2>
+    <div class="sub" id="zona"></div>
+    <div id="tablaPos"></div>
+    <div class="nota" id="notaTabla"></div>
+  </section>
+
+  <!-- Vista: Partidos (aquí se guardan) -->
+  <section id="vista-partidos" hidden>
+    <div class="card">
+      <h2>Nuevo partido</h2>
+      <form id="form">
+        <div class="row">
+          <label>Fecha<input type="date" id="fecha" required></label>
+          <label>Rival<input type="text" id="rival" required></label>
+        </div>
+        <label>Resultado (nuestros goles - rival, ej: 3-1)<input type="text" id="resultado" placeholder="3-1"></label>
+        <div class="row">
+          <label>Goles<input type="number" id="goles" min="0" value="0"></label>
+          <label>Asistencias<input type="number" id="asis" min="0" value="0"></label>
+        </div>
+        <div class="row">
+          <label>Minutos<input type="number" id="min" min="0" value="0"></label>
+          <label>Puntos (nota de papá)<input type="number" id="nota" min="0" max="10" step="0.5"></label>
+        </div>
+        <div class="row">
+          <label>Amarillas<input type="number" id="am" min="0" value="0"></label>
+          <label>Rojas<input type="number" id="roj" min="0" value="0"></label>
+        </div>
+        <button type="submit" class="principal">Guardar partido</button>
+      </form>
+    </div>
+    <div class="card">
+      <h2 id="tituloPartidos">Partidos guardados</h2>
+      <div id="lista"></div>
+    </div>
+  </section>
+
+  <!-- Vista: Estadísticas -->
+  <section id="vista-stats" class="card" hidden>
+    <h2 id="tituloAcum">Acumulado</h2>
+    <div class="grid">
+      <div class="stat"><b id="tPart">0</b><span>Partidos</span></div>
+      <div class="stat"><b id="tGol">0</b><span>Goles</span></div>
+      <div class="stat"><b id="tAsis">0</b><span>Asistencias</span></div>
+      <div class="stat"><b id="tMin">0</b><span>Minutos</span></div>
+      <div class="stat"><b id="tAm">0</b><span>Amarillas</span></div>
+      <div class="stat"><b id="tRoj">0</b><span>Rojas</span></div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+const KEY = 'misStatsFutbolEquipos';
+
+// Tablas base 2014, Clausura 2026.
+// Fila: [pos, equipo, pts, pj, pg, pe, pp, gf, gc, dif]. null = dato no publicado en la fuente.
+const BASE = {
+  'Don Bosco': {
+    nombre: 'Don Bosco Ramos Mejía',
+    zona: 'Baby Fútbol · Zona L · Categoría 2014 · Clausura 2026 (fuente: fefi.com.ar)',
+    filas: [
+      [1,'Jóvenes Deportistas',30,10,10,0,0,null,null,null],
+      [2,'C. S. y R. Español',26,10,8,0,2,null,null,null],
+      [3,'Don Bosco Ramos Mejía',25,9,8,0,1,null,null,null],
+      [4,'Sol del Plata',23,10,6,1,3,null,null,null],
+      [5,'Def. de Olivos Verde',22,9,6,1,2,null,null,null],
+      [6,'Mitre L.M.R.',22,9,6,1,2,null,null,null],
+      [7,'Cervantes "La Papelera"',21,10,5,1,4,null,null,null],
+      [8,'Villa Herminia',19,9,4,2,3,null,null,null],
+      [9,'Defensores de Cervantes',17,8,4,1,3,null,null,null],
+      [10,'Primera Junta',16,9,3,1,5,null,null,null],
+      [11,'Arco Valeno',15,9,3,0,6,null,null,null],
+      [12,'Los Leones de Villa Soldati',15,9,3,0,6,null,null,null],
+      [13,'Victoria F. C.',14,10,2,0,8,null,null,null],
+      [14,'Club Lomas 2 de Abril',13,9,2,0,7,null,null,null],
+      [15,'Saneli F.C.',12,10,1,0,9,null,null,null],
+      [16,'Crisol de Juventud',10,10,0,0,10,null,null,null]
+    ]
+  },
+  'Banfield': {
+    nombre: 'Banfield Ramos',
+    zona: 'Liga Buenos Aires · Infantiles · Liga 1 Campeonato (Clausura) · Categoría 2014',
+    filas: [
+      [1,'San Lorenzo S.M.',22,8,7,1,0,21,3,18],
+      [2,'Banfield Ramos',19,8,6,1,1,17,5,12],
+      [3,'Comunicaciones "N"',13,7,4,1,2,12,9,3],
+      [4,'Cecap. Ciudadela',12,8,4,0,4,19,14,5],
+      [5,'Banfield Oeste S.J.',11,6,3,2,1,14,5,9],
+      [6,'Argentinos Juniors "A"',8,6,1,5,0,9,4,5],
+      [7,'Dep. Laferrere',2,5,0,2,3,3,7,-4],
+      [8,'Dep. Riestra "A"',2,6,0,2,4,4,16,-12],
+      [9,'Dep. Español "A"',1,5,0,1,4,1,11,-10],
+      [10,'Independiente Berazategui',1,7,0,1,6,4,30,-26]
+    ]
+  }
+};
+
+let datos = { 'Don Bosco': [], 'Banfield': [] };
+let equipo = 'Don Bosco';
+let vista = 'tabla';
+try {
+  const guardado = JSON.parse(localStorage.getItem(KEY) || 'null');
+  if (guardado && typeof guardado === 'object') datos = Object.assign(datos, guardado);
+} catch (e) {}
+
+const $ = id => document.getElementById(id);
+function guardar() { try { localStorage.setItem(KEY, JSON.stringify(datos)); } catch (e) {} }
+function partidosActuales() { return datos[equipo] || []; }
+const suma = campo => partidosActuales().reduce((a, p) => a + (Number(p[campo]) || 0), 0);
+function escapar(t) {
+  return String(t ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+const celda = v => (v === null || v === undefined) ? '–' : v;
+const signo = v => (v === null || v === undefined) ? '–' : (v > 0 ? '+' + v : String(v));
+
+const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+function coincide(a, b) {
+  const na = norm(a), nb = norm(b);
+  return !!na && !!nb && (na.includes(nb) || nb.includes(na));
+}
+function parseRes(s) {
+  const m = String(s || '').match(/^\s*(\d+)\s*[-–]\s*(\d+)\s*$/);
+  return m ? [Number(m[1]), Number(m[2])] : null;
+}
+
+// Suma un partido a una fila: 3 puntos por victoria, 1 por empate.
+function aplicar(fila, gf, gc) {
+  fila.pj++;
+  if (gf > gc) { fila.pg++; fila.pts += 3; }
+  else if (gf === gc) { fila.pe++; fila.pts += 1; }
+  else { fila.pp++; }
+  if (fila.gf !== null) { fila.gf += gf; fila.gc += gc; fila.dif = fila.gf - fila.gc; }
+}
+
+// Tabla base + partidos cargados con resultado.
+function calcularTabla(eq) {
+  const base = BASE[eq];
+  const filas = base.filas.map(f => ({ name: f[1], pts: f[2], pj: f[3], pg: f[4], pe: f[5], pp: f[6], gf: f[7], gc: f[8], dif: f[9] }));
+  const propio = filas.find(f => f.name === base.nombre);
+  let sinResultado = 0, rivalesNoEncontrados = 0;
+  (datos[eq] || []).forEach(p => {
+    const r = parseRes(p.resultado);
+    if (!r) { sinResultado++; return; }
+    aplicar(propio, r[0], r[1]);
+    const rival = filas.find(f => f !== propio && coincide(f.name, p.rival));
+    if (rival) aplicar(rival, r[1], r[0]);
+    else rivalesNoEncontrados++;
+  });
+  filas.sort((a, b) => (b.pts - a.pts) || ((b.dif ?? 0) - (a.dif ?? 0)));
+  return { filas, propio: base.nombre, sinResultado, rivalesNoEncontrados, zona: base.zona };
+}
+
+function renderTabla() {
+  const t = calcularTabla(equipo);
+  $('titulo').textContent = 'Posiciones · ' + equipo;
+  $('zona').textContent = t.zona;
+  const filas = t.filas.map((f, i) => `
+    <tr class="${f.name === t.propio ? 'propio' : ''}">
+      <td>${i + 1}</td><td class="eq">${escapar(f.name)}</td><td>${f.pts}</td><td>${f.pj}</td><td>${f.pg}</td><td>${f.pe}</td><td>${f.pp}</td>
+      <td>${celda(f.gf)}</td><td>${celda(f.gc)}</td><td>${signo(f.dif)}</td>
+    </tr>`).join('');
+  $('tablaPos').innerHTML = `
+    <div class="tabla-wrap"><table>
+      <thead><tr><th>Pos</th><th class="eq">Equipo</th><th>Pts</th><th>PJ</th><th>PG</th><th>PE</th><th>PP</th><th>GF</th><th>GC</th><th>DIF</th></tr></thead>
+      <tbody>${filas}</tbody>
+    </table></div>`;
+  const notas = [];
+  const cargados = partidosActuales().length;
+  if (cargados) notas.push(`Incluye ${cargados} partido(s) cargados en la sección Partidos.`);
+  if (t.sinResultado) notas.push(`${t.sinResultado} partido(s) sin resultado no suman a la tabla.`);
+  if (t.rivalesNoEncontrados) notas.push(`${t.rivalesNoEncontrados} rival(es) no están en la tabla, así que solo se suma tu equipo.`);
+  if (BASE[equipo].filas.some(f => f[7] === null)) notas.push('La fuente no trae GF, GC ni DIF para esta tabla, así que esas columnas quedan en blanco salvo para los partidos cargados.');
+  $('notaTabla').textContent = notas.join(' ');
+}
+
+function renderPartidos() {
+  $('tituloPartidos').textContent = 'Partidos guardados · ' + equipo;
+  const orden = [...partidosActuales()].sort((a, b) => b.fecha.localeCompare(a.fecha));
+  if (!orden.length) {
+    $('lista').innerHTML = '<div class="vacio-msg">Todavía no cargaste partidos de ' + escapar(equipo) + '</div>';
+    return;
+  }
+  $('lista').innerHTML = orden.map(p => {
+    const tienePts = p.nota !== '' && p.nota != null;
+    return `
+    <div class="partido">
+      <div class="top">
+        <span>vs ${escapar(p.rival)}${p.resultado ? ' · ' + escapar(p.resultado) : ' · sin resultado'}</span>
+        <span class="pts ${tienePts ? '' : 'vacio'}">${tienePts ? Number(p.nota).toFixed(1) + ' pts' : 'sin pts'}</span>
+      </div>
+      <div class="det">${escapar(p.fecha)} · ⚽ ${p.goles} · 🅰️ ${p.asis} · ⏱ ${p.min}′ · 🟨 ${p.am} · 🟥 ${p.roj}</div>
+      <button class="del" data-id="${p.id}" data-armado="no">Eliminar</button>
+    </div>`;
+  }).join('');
+}
+
+function renderStats() {
+  $('tituloAcum').textContent = 'Acumulado · ' + equipo;
+  $('tPart').textContent = partidosActuales().length;
+  $('tGol').textContent = suma('goles');
+  $('tAsis').textContent = suma('asis');
+  $('tMin').textContent = suma('min');
+  $('tAm').textContent = suma('am');
+  $('tRoj').textContent = suma('roj');
+}
+
+function render() {
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('activo', b.dataset.equipo === equipo));
+  document.querySelectorAll('.vista-btn').forEach(b => b.classList.toggle('activo', b.dataset.vista === vista));
+  $('vista-tabla').hidden = vista !== 'tabla';
+  $('vista-partidos').hidden = vista !== 'partidos';
+  $('vista-stats').hidden = vista !== 'stats';
+  if (vista === 'tabla') renderTabla();
+  if (vista === 'partidos') renderPartidos();
+  if (vista === 'stats') renderStats();
+}
+
+document.querySelector('.tabs').addEventListener('click', e => {
+  const btn = e.target.closest('.tab');
+  if (!btn) return;
+  equipo = btn.dataset.equipo;
+  render();
+});
+
+document.querySelector('.vistas').addEventListener('click', e => {
+  const btn = e.target.closest('.vista-btn');
+  if (!btn) return;
+  vista = btn.dataset.vista;
+  render();
+});
+
+$('form').addEventListener('submit', e => {
+  e.preventDefault();
+  if (!datos[equipo]) datos[equipo] = [];
+  datos[equipo].push({
+    id: Date.now().toString(),
+    fecha: $('fecha').value,
+    rival: $('rival').value.trim(),
+    resultado: $('resultado').value.trim(),
+    goles: Number($('goles').value) || 0,
+    asis: Number($('asis').value) || 0,
+    min: Number($('min').value) || 0,
+    nota: $('nota').value,
+    am: Number($('am').value) || 0,
+    roj: Number($('roj').value) || 0
+  });
+  guardar();
+  e.target.reset();
+  $('goles').value = $('asis').value = $('min').value = $('am').value = $('roj').value = 0;
+  render();
+});
+
+$('lista').addEventListener('click', e => {
+  const btn = e.target.closest('.del');
+  if (!btn) return;
+  if (btn.dataset.armado !== 'si') {
+    btn.dataset.armado = 'si';
+    btn.textContent = 'Tocá otra vez para borrar';
+    setTimeout(() => { btn.dataset.armado = 'no'; btn.textContent = 'Eliminar'; }, 4000);
+    return;
+  }
+  datos[equipo] = partidosActuales().filter(p => p.id !== btn.dataset.id);
+  guardar();
+  render();
+});
+
+render();
+</script>
+</body>
+</html>
