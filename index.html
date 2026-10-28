@@ -129,7 +129,12 @@
         </div>
         <label>Descripción<input type="text" id="mDesc" placeholder="Ej: gol vs Mitre"></label>
         <label>Archivos (fotos o videos)<input type="file" id="mFile" accept="image/*,video/*" multiple></label>
-        <button type="submit" class="principal">Guardar</button>
+        <div class="grabar">
+          <button type="button" id="btnGrabar" class="principal">Grabar video</button>
+          <div class="nota" id="gEstado"></div>
+          <video id="preview" hidden muted playsinline style="width:100%;border-radius:10px;margin-top:8px;background:#000"></video>
+        </div>
+        <button type="submit" class="principal" style="margin-top:8px">Guardar</button>
         <div class="nota" id="mEstado"></div>
       </form>
     </div>
@@ -456,6 +461,55 @@ $('galeria').addEventListener('click', async e => {
   }
   try { await borrarArchivo(btn.dataset.id); } catch (err) {}
   await renderMedia();
+});
+
+// ----- Grabar video directo a Fotos y videos -----
+let grabacion = null, chunks = [], streamActual = null;
+$('btnGrabar').addEventListener('click', async () => {
+  if (grabacion && grabacion.state === 'recording') { grabacion.stop(); return; }
+  if (!navigator.mediaDevices || !window.MediaRecorder) {
+    $('gEstado').textContent = 'Este navegador no permite grabar. Probá con Chrome o Safari actualizados.';
+    return;
+  }
+  try {
+    streamActual = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: true });
+  } catch (err) {
+    $('gEstado').textContent = 'No se pudo acceder a la cámara o al micrófono. Revisá los permisos.';
+    return;
+  }
+  const preview = $('preview');
+  preview.srcObject = streamActual;
+  preview.hidden = false;
+  preview.play().catch(() => {});
+  chunks = [];
+  const tipo = MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : '';
+  grabacion = new MediaRecorder(streamActual, tipo ? { mimeType: tipo } : undefined);
+  grabacion.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+  grabacion.onstop = async () => {
+    streamActual.getTracks().forEach(t => t.stop());
+    preview.srcObject = null;
+    preview.hidden = true;
+    const blob = new Blob(chunks, { type: grabacion.mimeType || 'video/webm' });
+    $('btnGrabar').textContent = 'Grabar video';
+    try {
+      await guardarArchivo({
+        id: Date.now().toString() + Math.random().toString(36).slice(2, 7),
+        equipo: $('mEquipo').value,
+        fecha: $('mFecha').value || new Date().toISOString().slice(0, 10),
+        desc: $('mDesc').value.trim() || 'Grabación',
+        tipo: blob.type,
+        nombre: 'grabacion',
+        blob
+      });
+      $('gEstado').textContent = 'Grabación guardada en Fotos y videos';
+      await renderMedia();
+    } catch (err) {
+      $('gEstado').textContent = 'No se pudo guardar la grabación (quizá no hay espacio)';
+    }
+  };
+  grabacion.start();
+  $('btnGrabar').textContent = 'Detener y guardar';
+  $('gEstado').textContent = 'Grabando…';
 });
 
 render();
