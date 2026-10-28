@@ -129,6 +129,7 @@
         </div>
         <label>Descripción<input type="text" id="mDesc" placeholder="Ej: gol vs Mitre"></label>
         <label>Archivos (fotos o videos)<input type="file" id="mFile" accept="image/*,video/*" multiple></label>
+        <label>Sacar foto con la cámara<input type="file" id="mFoto" accept="image/*" capture="environment"></label>
         <div class="grabar">
           <button type="button" id="btnGrabar" class="principal">Grabar video</button>
           <div class="nota" id="gEstado"></div>
@@ -427,7 +428,7 @@ async function renderMedia() {
 
 $('formMedia').addEventListener('submit', async e => {
   e.preventDefault();
-  const files = [...$('mFile').files];
+  const files = [...$('mFile').files, ...$('mFoto').files];
   if (!files.length) { $('mEstado').textContent = 'Elegí al menos un archivo'; return; }
   $('mEstado').textContent = 'Guardando…';
   try {
