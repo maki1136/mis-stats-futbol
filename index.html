@@ -16,7 +16,7 @@
   .tabs { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:8px; margin-bottom:8px; }
   .tab, .vista-btn { background:var(--blanco); color:var(--verde); border:2px solid var(--verde); border-radius:10px; padding:10px; font-size:15px; font-weight:600; width:100%; }
   .tab.activo, .vista-btn.activo { background:var(--verde); color:var(--blanco); }
-  .vistas { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; margin-bottom:12px; }
+  .vistas { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; margin-bottom:12px; }
   .vista-btn { font-size:14px; padding:8px 4px; border-width:1px; }
   .card { background:var(--blanco); border-radius:12px; padding:14px; margin-bottom:12px; box-shadow:0 1px 3px rgba(0,0,0,.08); min-width:0; }
   .grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
@@ -43,6 +43,11 @@
   .del { background:none; border:none; color:#b00020; width:auto; padding:0 4px; font-size:13px; text-decoration:underline; font-weight:400; }
   .vacio-msg { text-align:center; color:#888; padding:12px; }
   .nota { font-size:12px; color:var(--sub); margin-top:8px; }
+  select { width:100%; padding:9px; margin-top:3px; border:1px solid #ccc; border-radius:8px; font-size:16px; background:#fff; }
+  .galeria { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+  .item { background:var(--gris); border-radius:10px; overflow:hidden; min-width:0; }
+  .item img, .item video { width:100%; display:block; max-width:100%; background:#000; }
+  .item .info { padding:6px 8px; font-size:12px; color:var(--sub); }
 </style>
 </head>
 <body>
@@ -58,6 +63,7 @@
     <button class="vista-btn" data-vista="tabla">Tabla</button>
     <button class="vista-btn" data-vista="partidos">Partidos</button>
     <button class="vista-btn" data-vista="stats">Estadísticas</button>
+    <button class="vista-btn" data-vista="media">Fotos y videos</button>
   </div>
 
   <!-- Vista: Tabla -->
@@ -109,6 +115,27 @@
       <div class="stat"><b id="tMin">0</b><span>Minutos</span></div>
       <div class="stat"><b id="tAm">0</b><span>Amarillas</span></div>
       <div class="stat"><b id="tRoj">0</b><span>Rojas</span></div>
+    </div>
+  </section>
+
+  <!-- Vista: Fotos y videos -->
+  <section id="vista-media" hidden>
+    <div class="card">
+      <h2>Subir foto o video</h2>
+      <form id="formMedia">
+        <div class="row">
+          <label>Equipo<select id="mEquipo"><option>Don Bosco</option><option>Banfield</option></select></label>
+          <label>Fecha<input type="date" id="mFecha"></label>
+        </div>
+        <label>Descripción<input type="text" id="mDesc" placeholder="Ej: gol vs Mitre"></label>
+        <label>Archivos (fotos o videos)<input type="file" id="mFile" accept="image/*,video/*" multiple></label>
+        <button type="submit" class="principal">Guardar</button>
+        <div class="nota" id="mEstado"></div>
+      </form>
+    </div>
+    <div class="card">
+      <h2>Guardados</h2>
+      <div id="galeria" class="galeria"></div>
     </div>
   </section>
 
@@ -275,9 +302,11 @@ function render() {
   $('vista-tabla').hidden = vista !== 'tabla';
   $('vista-partidos').hidden = vista !== 'partidos';
   $('vista-stats').hidden = vista !== 'stats';
+  $('vista-media').hidden = vista !== 'media';
   if (vista === 'tabla') renderTabla();
   if (vista === 'partidos') renderPartidos();
   if (vista === 'stats') renderStats();
+  if (vista === 'media') renderMedia();
 }
 
 document.querySelector('.tabs').addEventListener('click', e => {
@@ -327,6 +356,106 @@ $('lista').addEventListener('click', e => {
   datos[equipo] = partidosActuales().filter(p => p.id !== btn.dataset.id);
   guardar();
   render();
+});
+
+// ----- Fotos y videos (IndexedDB: guarda archivos en el navegador) -----
+const DB_NAME = 'misStatsMedia';
+const STORE = 'archivos';
+let urlsActivas = [];
+
+function abrirDB() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open(DB_NAME, 1);
+    r.onupgradeneeded = () => r.result.createObjectStore(STORE, { keyPath: 'id' });
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+async function guardarArchivo(obj) {
+  const db = await abrirDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).put(obj);
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error);
+  });
+}
+async function listarArchivos() {
+  const db = await abrirDB();
+  return new Promise((res, rej) => {
+    const q = db.transaction(STORE).objectStore(STORE).getAll();
+    q.onsuccess = () => res(q.result);
+    q.onerror = () => rej(q.error);
+  });
+}
+async function borrarArchivo(id) {
+  const db = await abrirDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).delete(id);
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error);
+  });
+}
+
+async function renderMedia() {
+  urlsActivas.forEach(u => URL.revokeObjectURL(u));
+  urlsActivas = [];
+  const cont = $('galeria');
+  let items = [];
+  try { items = await listarArchivos(); }
+  catch (e) { cont.innerHTML = '<div class="vacio-msg">No se pudo abrir el almacenamiento de este navegador</div>'; return; }
+  items.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+  if (!items.length) { cont.innerHTML = '<div class="vacio-msg">Todavía no subiste fotos ni videos</div>'; return; }
+  cont.innerHTML = items.map(it => {
+    const url = URL.createObjectURL(it.blob);
+    urlsActivas.push(url);
+    const media = String(it.tipo || '').startsWith('video')
+      ? `<video src="${url}" controls playsinline preload="metadata"></video>`
+      : `<img src="${url}" alt="">`;
+    return `<div class="item">${media}
+      <div class="info">${escapar(it.equipo)} · ${escapar(it.fecha || 'sin fecha')}<br>${escapar(it.desc || '')}</div>
+      <div style="padding:0 8px 8px"><button class="del" data-id="${it.id}" data-armado="no">Eliminar</button></div>
+    </div>`;
+  }).join('');
+}
+
+$('formMedia').addEventListener('submit', async e => {
+  e.preventDefault();
+  const files = [...$('mFile').files];
+  if (!files.length) { $('mEstado').textContent = 'Elegí al menos un archivo'; return; }
+  $('mEstado').textContent = 'Guardando…';
+  try {
+    for (const f of files) {
+      await guardarArchivo({
+        id: Date.now().toString() + Math.random().toString(36).slice(2, 7),
+        equipo: $('mEquipo').value,
+        fecha: $('mFecha').value,
+        desc: $('mDesc').value.trim(),
+        tipo: f.type,
+        nombre: f.name,
+        blob: f
+      });
+    }
+    $('mEstado').textContent = files.length + ' archivo(s) guardado(s)';
+    e.target.reset();
+    await renderMedia();
+  } catch (err) {
+    $('mEstado').textContent = 'No se pudo guardar (quizá no hay espacio en el navegador)';
+  }
+});
+
+$('galeria').addEventListener('click', async e => {
+  const btn = e.target.closest('.del');
+  if (!btn) return;
+  if (btn.dataset.armado !== 'si') {
+    btn.dataset.armado = 'si';
+    btn.textContent = 'Tocá otra vez para borrar';
+    setTimeout(() => { btn.dataset.armado = 'no'; btn.textContent = 'Eliminar'; }, 4000);
+    return;
+  }
+  try { await borrarArchivo(btn.dataset.id); } catch (err) {}
+  await renderMedia();
 });
 
 render();
